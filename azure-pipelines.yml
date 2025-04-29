@@ -1,0 +1,66 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - '**/*.json'
+      - '**/*.yaml'
+
+variables:
+  BRIGHTSEC_API_KEY: $(BRIGHTSEC_API_KEY)  # Set as secret in pipeline variables
+  BRIGHTSEC_PROJECT_ID: $(BRIGHTSEC_PROJECT_ID)
+  BRIGHTSEC_HOSTNAME: 'eu.brightsec.com'
+  SCAN_NAME: 'Automated-Scan-$(Build.BuildId)'  # Dynamic scan name
+  PROJECT_NAME: 'Your-Project-Name'  # Define or use variable
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: Discovery
+  jobs:
+  - job: RunDiscovery
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.9'
+    
+    - script: pip install requests
+      displayName: 'Install dependencies'
+
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)'
+        Contents: '**/*.swagger.json'
+        TargetFolder: '$(Build.BinariesDirectory)'
+
+    - script: |
+        cp $(apiSchema.secureFilePath) $(Build.SourcesDirectory)/schema.json
+        python $(Build.SourcesDirectory)/uploadAPI.py
+      displayName: 'Run discovery'
+      env:
+        BRIGHT_API_TOKEN: $(BRIGHTSEC_API_KEY)
+        BRIGHT_PROJECT_ID: $(BRIGHTSEC_PROJECT_ID)
+
+- stage: Scan
+  dependsOn: Discovery
+  jobs:
+  - job: RunScan
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.9'
+    
+    - script: pip install requests
+      displayName: 'Install dependencies'
+
+    - script: |
+        python3 $(Build.SourcesDirectory)/run_ep_scan.py \
+          --api_key $(BRIGHTSEC_API_KEY) \
+          --scan_name $(SCAN_NAME) \
+          --project_name $(PROJECT_NAME) \
+          --project_id $(BRIGHTSEC_PROJECT_ID)
+      displayName: 'Run EP Scan'
+      env:
+        BRIGHTSEC_API_KEY: $(BRIGHTSEC_API_KEY)

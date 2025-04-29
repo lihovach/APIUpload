@@ -1,0 +1,6 @@
+# BrightSec API Integration Requirements
+requests==2.31.0         
+python-dotenv==1.0.0    
+argparse==1.4.0          
+logging==0.4.9.6         
+PyYAML==6.0.1            
