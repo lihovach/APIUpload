@@ -57,20 +57,20 @@ def fetch_entry_points(project_id):
 
     logger.info(f"Fetched {len(entry_point_ids)} entry points for project {project_id}.")
     
-    # Save entry points to a .txt file
-    with open('entrypoints.txt', 'w') as f:
-        for entry_point in entry_point_ids:
-            f.write(f"{entry_point}\n")
-    
-    logger.info(f"Entry points have been saved to 'entrypoints.txt'.")
+    # Return entry points directly without file I/O
     return entry_point_ids
 
-# Function to start a scan
+
 def start_scan(project_id, project_name, entry_point_ids):
     """Starts a scan with the provided entry points."""
-    if len(entry_point_ids) == 0:
+    """Starts a scan with the provided entry points."""
+    if not entry_point_ids:
         logger.info(f"No entry points found for project {project_name}. Skipping scan.")
         return
+
+    # Log entry points directly instead of writing to file
+    entry_points_str = '\n'.join(entry_point_ids)
+    logger.info(f"Entry points to be scanned:\n{entry_points_str}")
 
     scan_payload = {
         "name": scan_name,
