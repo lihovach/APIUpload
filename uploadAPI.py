@@ -3,8 +3,8 @@ import requests
 import json
 from pathlib import Path
 
-BRIGHT_API_TOKEN = "28n2yhr.nexa.cc6zeiwccs2iaeg9hgnws1wsey7xrhkj"
-BRIGHT_PROJECT_ID = "uLy59Y1DfVSZjYf9sZDYe3"
+BRIGHT_API_TOKEN = "Your API key"
+BRIGHT_PROJECT_ID = "Your projecT ID"
 BRIGHT_HOSTNAME = "eu.brightsec.com"
 
 def find_schema_files():
