@@ -1,0 +1,151 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'BRIGHT_TOKEN', defaultValue: 'TOKEN', description: 'Bright Organization Secret Token')
+        string(name: 'PROJECT_ID', defaultValue: 'PROJECT ID', description: 'Bright Project ID')
+        string(name: 'CLUSTER', defaultValue: 'app', description: 'Cluster app/eu (default: app)')
+        string(name: 'SCAN_NAME', defaultValue: 'Default Pipeline', description: 'Name of the scan')
+        string(name: 'SCAN_BUCKETS', defaultValue: '"api","business_logic","client_side","cve","legacy","server_side"', description: 'Comma-separated list of scan buckets')
+        string(name: 'EP_STATUSES', defaultValue: 'new changed tested vulnerable', description: 'Space-separated list of statuses to use')
+
+        string(name: 'REPEATER_ID', defaultValue: '', description: 'Repeater ID (optional)')
+        string(name: 'USE_REPEATER', defaultValue: 'false', description: 'Use Repeater? (true/false)')
+        string(name: 'TEMPLATE_ID', defaultValue: 'siEwcKX7dUy743L3rAzBET', description: 'Bright Scan Template ID (optional)')
+    }
+
+    stages {
+        stage('Start Pulling & Security Scan') {
+            steps {
+                script {
+                    def bucketsArray = params.SCAN_BUCKETS.split(',')
+                    def jsonBuckets = bucketsArray.collect { "\"${it.trim()}\"" }.join(',')
+
+                    sh '''#!/bin/bash
+                        set -e
+
+                        echo "INSIDE SCRIPT: CLUSTER=${CLUSTER}, SCAN_NAME=${SCAN_NAME}, PROJECT_ID=${PROJECT_ID}, BRIGHT_SECRET_TOKEN=${BRIGHT_TOKEN}"
+
+                        BASE_URL="https://${CLUSTER}.brightsec.com/api/v2/projects/${PROJECT_ID}/entry-points?limit=500&moveTo=next"
+                        SCAN_URL="https://${CLUSTER}.brightsec.com/api/v1/scans"
+                        entry_points=()
+
+                        read -ra STATUSES <<< "${EP_STATUSES}"
+                        for i in "${!STATUSES[@]}"; do
+                            STATUSES[$i]=$(echo "${STATUSES[$i]}" | tr -d '"')
+                        done
+
+                        echo "Fetching all status request types: ${STATUSES[@]}"
+                        for status in "${STATUSES[@]}"; do
+                            BASE_URL+="&status%5B%5D=${status}"
+                        done
+                        echo "Final base URL: ${BASE_URL}"
+
+                        fetch_entry_points() {
+                            url=$BASE_URL
+                            while [[ -n "$url" ]]; do
+                                response=$(curl -s -w "\\n%{http_code}" -H "accept: application/json" -H "Authorization: api-key ${BRIGHT_TOKEN}" -H "Content-Type: application/json" "$url")
+
+                                body=$(echo "$response" | sed '$d')
+                                http_code=$(echo "$response" | tail -n 1)
+
+                                if [[ "$http_code" -ne 200 ]]; then
+                                    echo "Failed to fetch entry points. Status code: $http_code"
+                                    break
+                                fi
+
+                                if echo "$body" | jq -e '.items' > /dev/null 2>&1; then
+                                    temp_ids=($(echo "$body" | jq -r '.items[].id'))
+                                    entry_points+=("${temp_ids[@]}")
+                                    echo "Fetched ${#entry_points[@]} total entry point(s) so far"
+                                else
+                                    echo "No 'items' array found in response. Exiting pagination loop."
+                                    break
+                                fi
+
+                                last_id=$(echo "$body" | jq -r '.items[-1].id // empty')
+                                last_created_at=$(echo "$body" | jq -r '.items[-1].createdAt // empty')
+
+                                if [[ -n "$last_id" && -n "$last_created_at" ]]; then
+                                    url="${BASE_URL}&nextId=${last_id}&nextCreatedAt=${last_created_at}"
+                                else
+                                    break
+                                fi
+                            done
+                        }
+
+                        send_curl_request() {
+                            if [ ${#entry_points[@]} -eq 0 ]; then
+                                echo "No entry points fetched. Exiting..."
+                                exit 1
+                            fi
+
+                            entry_point_ids=$(printf ',"%s"' "${entry_points[@]}")
+                            entry_point_ids="${entry_point_ids:1}"
+
+                            if [[ "${USE_REPEATER}" == "true" && -n "${REPEATER_ID}" ]]; then
+                                repeaters_line="\\\"repeaters\\\": [\\\"${REPEATER_ID}\\\"],"
+                            else
+                                repeaters_line=""
+                            fi
+
+                            if [[ -n "${TEMPLATE_ID}" ]]; then
+                                template_line="\\\"templateId\\\": \\\"${TEMPLATE_ID}\\\","
+                            else
+                                template_line=""
+                            fi
+
+                            PAYLOAD="{
+                                \\\"name\\\": \\\"${SCAN_NAME}\\\",
+                                \\\"poolSize\\\": 10,
+                                \\\"smart\\\": true,
+                                \\\"skipStaticParams\\\": true,
+                                \\\"exclusions\\\": {\\\"requests\\\": []},
+                                \\\"projectId\\\": \\\"${PROJECT_ID}\\\",
+                                ${template_line}
+                                \\\"labels\\\": [],
+                                \\\"discoveryTypes\\\": null,
+                                \\\"attackParamLocations\\\": [\\\"query\\\", \\\"fragment\\\", \\\"body\\\"],
+                                ${repeaters_line}
+                                \\\"module\\\": \\\"dast\\\",
+                                \\\"entryPointIds\\\": [${entry_point_ids}],
+                                \\\"info\\\": {\\\"source\\\": \\\"ui\\\", \\\"client\\\": {\\\"name\\\": \\\"bright-ui\\\", \\\"version\\\": \\\"v4.91.0\\\"}},
+                                \\\"buckets\\\": [${SCAN_BUCKETS}]
+                            }"
+
+                            echo "Request body: ${PAYLOAD}"
+
+                            response=$(curl -s -w "\\n%{http_code}" -X POST "${SCAN_URL}" \
+                                -H "Authorization: api-key ${BRIGHT_TOKEN}" \
+                                -H "Content-Type: application/json" \
+                                --data-raw "${PAYLOAD}")
+
+                            body=$(echo "$response" | sed '$d')
+                            http_code=$(echo "$response" | tail -n 1)
+
+                            if [[ "$http_code" -eq 200 || "$http_code" -eq 201 ]]; then
+                                scan_id=$(echo "$body" | jq -r '.id')
+                                echo "✅ Bright Scan started successfully with ID: $scan_id"
+                            else
+                                echo "❌ Failed to start Bright Scan. HTTP Code: $http_code. Response: $body"
+                                exit 1
+                            fi
+                        }
+
+                        fetch_entry_points
+                        send_curl_request
+                    '''
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
