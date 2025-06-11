@@ -6,6 +6,7 @@ from pathlib import Path
 BRIGHT_API_TOKEN = "Your API key"
 BRIGHT_PROJECT_ID = "Your projecT ID"
 BRIGHT_HOSTNAME = "eu.brightsec.com"
+AUTH_OBJECT_ID = "Your AO id"
 
 def find_schema_files():
     """Find API schema files in current directory"""
@@ -32,28 +33,41 @@ def start_discovery(file_id):
         "Authorization": f"Api-Key {BRIGHT_API_TOKEN}",
         "Content-Type": "application/json"
     }
-    
+
     payload = {
-        "discoveryTypes": ["oas"],
-        "fileId": file_id,
-        "hostsFilter": ["brokencrystals.com"],
-        "name": "Automated Discovery",
-        "optimizedCrawler": True,
-        "poolSize": 10,
-        "maxInteractionsChainLength": 3,
-        "subdomainsCrawl": False,
-        "exclusions": {
-            "requests": [
-                {
-                    "methods": [],
-                    "patterns": [
-                        "(?<excluded_file_ext>(\\/\\/[^?#]+\\.)((?<image>jpg|jpeg|png|gif|svg|eps|webp|tif|tiff|bmp|psd|ai|raw|cr|pcx|tga|ico)|(?<video>mp4|avi|3gp|flv|h264|m4v|mkv|mov|mpg|mpeg|vob|wmv)|(?<audio>wav|mp3|ogg|wma|mid|midi|aif)|(?<document>doc|docx|odt|pdf|rtf|ods|xls|xlsx|odp|ppt|pptx)|(?<font>ttf|otf|fnt|fon))(?:$|#|\\?))",
-                        "logout|signout"
-                    ]
-                }
-            ]
+        "config": {
+            "name": "Discovery for Booking Journey APIs",
+            "discoveryTypes": ["oas"],
+            "fileId": file_id,
+#            "hostsFilter": ["alpha.iqstudentaccommodation.com"], is required if the uploaded schema file does NOT include a 'servers' section (i.e., no host defined).
+            "authObjectId": AUTH_OBJECT_ID,
+            "optimizedCrawler": True,
+            "useCrawlerOdometer": False,
+            "maxInteractionsChainLength": 3,
+            "subdomainsCrawl": False,
+            "poolSize": 10,
+            "requestsRateLimit": 300,
+            "queuePriority": 0,
+            "exclusions": {
+                "requests": [
+                    {
+                        "patterns": [
+                            "(?<excluded_file_ext>(\\/\\/[^?#]+\\.)((?<image>jpg|jpeg|png|gif|svg|eps|webp|tif|tiff|bmp|psd|ai|raw|cr|pcx|tga|ico)|(?<video>mp4|avi|3gp|flv|h264|m4v|mkv|mov|mpg|mpeg|vob|wmv)|(?<audio>wav|mp3|ogg|wma|mid|midi|aif)|(?<document>doc|docx|odt|pdf|rtf|ods|xls|xlsx|odp|ppt|pptx)|(?<font>ttf|otf|fnt|fon))(?:$|#|\\?))"
+                        ]
+                    },
+                    {
+                        "patterns": ["logout|signout"]
+                    },
+                    {
+                        "patterns": [
+                            "(\\/(client_204|csi_204|gen_204|generate_204)\\?)|(&l=dataLayer&cx=c)|(\\.js\\?id=GTM-)|(\\/ns.html\\?id=GTM-)|(:\\/\\/gtm.*\\.js\\?st=)|(:\\/\\/load.*\\.js\\?st=)|.*adservice\\.google\\.|.*googletagmanager.com|.*google-analytics.com|beacon.min.js|(\\/cdn-cgi\\/apps\\/body\\/)|(.*trustarc.com\\/(cap|log)?)|.*trkn.us|(\\/facebook[-_\\/]?(pixel|fbevents|productad).*.js)|(\\/\\?sentry_(key|version)=)|(\\/sentry[-\\/](bundle|browser|logger|tracing).*.js)|(\\/log\\?(action|count|data|documentUrl|event|entry|id|kc|method|ref|sLog|tag|uuid)=)|mathtag.com|scorecardresearch.com|criteo\\.(com|net)"
+                        ]
+                    }
+                ]
+            }
         }
     }
+
     
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
