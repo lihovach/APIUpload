@@ -39,7 +39,7 @@ def start_discovery(file_id):
             "name": "Discovery for Booking Journey APIs",
             "discoveryTypes": ["oas"],
             "fileId": file_id,
-#            "hostsFilter": ["alpha.iqstudentaccommodation.com"], is required if the uploaded schema file does NOT include a 'servers' section (i.e., no host defined).
+#            "hostsFilter": [" "], is required if the uploaded schema file does NOT include a 'servers' section (i.e., no host defined).
             "authObjectId": AUTH_OBJECT_ID,
             "optimizedCrawler": True,
             "useCrawlerOdometer": False,
